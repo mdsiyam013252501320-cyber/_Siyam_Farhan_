@@ -4,8 +4,9 @@ const path = require("path");
 
 module.exports = {
   config: {
-    name: "siyam admin",
-    version: "2.2.0",
+    name: "admin", // ✅ FIX (space removed)
+    aliases: ["owner"],
+    version: "2.2.1",
     author: "亗 SIYAM HASAN 亗",
     countDown: 5,
     role: 0,
@@ -17,7 +18,9 @@ module.exports = {
 
   onChat: async function ({ api, event }) {
     const msg = event.body ? event.body.toLowerCase() : "";
-    if (msg !== "admin" && msg !== "owner") return;
+
+    // ✅ FIX (flexible trigger)
+    if (!msg.includes("admin") && !msg.includes("owner")) return;
 
     const time = new Date().toLocaleTimeString("en-BD", {
       hour: "2-digit",
@@ -66,9 +69,14 @@ module.exports = {
 ╰━━━〔《𓆩𝐊𝐈𝐍𝐆𓆪》〕━━━╯
 `;
 
-    // 🎥 Video URL
     const videoUrl = "https://files.catbox.moe/g5vr8h.mp4";
-    const filePath = path.join(__dirname, "cache", "admin.mp4");
+
+    const cacheFolder = path.join(__dirname, "cache");
+    if (!fs.existsSync(cacheFolder)) {
+      fs.mkdirSync(cacheFolder);
+    }
+
+    const filePath = path.join(cacheFolder, "admin.mp4");
 
     try {
       const response = await axios({
@@ -90,6 +98,10 @@ module.exports = {
           () => fs.unlinkSync(filePath),
           event.messageID
         );
+      });
+
+      writer.on("error", () => {
+        api.sendMessage(info, event.threadID, event.messageID);
       });
 
     } catch (e) {
