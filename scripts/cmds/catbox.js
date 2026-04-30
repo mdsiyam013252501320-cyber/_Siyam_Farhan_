@@ -1,115 +1,88 @@
-const fs = require("fs");
-const path = require("path");
 const axios = require("axios");
-const FormData = require("form-data");
 
-/**
- * 🔒 AUTHOR LOCK SYSTEM
- */
-const SOURCE_CODE = fs.readFileSync(__filename, "utf8");
-if (!SOURCE_CODE.includes('author: "FARHAN-KHAN"')) {
-  console.error("❌ FILE LOCKED: Author has been modified!");
-  process.exit(1);
-}
+const getBase = async () => {
+        const res = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
+        return res.data.mahmud;
+};
 
 module.exports = {
-  config: {
-    name: "catbox",
-    version: "1.0.3",
-    author: "FARHAN-KHAN",
-    role: 0,
-    shortDescription: "Upload media to Catbox",
-    longDescription: "Reply to media file to upload and get link",
-    category: "media",
-    guide: "[reply to image/video/audio]",
-    cooldowns: 5
-  },
+        config: {
+                name: "catbox",
+                aliases: ["cb"],
+                version: "1.7",
+                author: "siyam",
+                countDown: 10,
+                role: 0,
+                description: {
+                        bn: "যেকোনো মিডিয়া ফাইলকে লিঙ্কে রূপান্তর করুন",
+                        en: "Convert any media file into a link",
+                        vi: "Chuyển đổi bất kỳ tệp phương tiện nào thành liên kết"
+                },
+                category: "tools",
+                guide: {
+                        bn: '   {pn}: যেকোনো ছবি/ভিডিওতে রিপ্লাই দিয়ে ব্যবহার করুন',
+                        en: '   {pn}: Reply to any image/video to get the link',
+                        vi: '   {pn}: Phản hồi bất kỳ ảnh/video nào để lấy liên kết'
+                }
+        },
 
-  onStart: async function ({ api, event }) {
-    const { threadID, messageID, messageReply } = event;
+        langs: {
+                bn: {
+                        noMedia: "🐤 | বেবি, একটি ছবি বা ভিডিওতে রিপ্লাই দাও! 🖼️",
+                        uploading: "⌛ | আপলোড হচ্ছে, একটু অপেক্ষা করো বেবি... <😘",
+                        success: "Successfully Uploaded ✅\n\n🔗 𝐔𝐑𝐋: %1",
+                        error: "× সমস্যা হয়েছে: %1। প্রয়োজনে Contact সিয়াম বস+8801789138157।"
+                },
+                en: {
+                        noMedia: "🐤 | Baby, please reply to a media file (image/video)! 🖼️",
+                        uploading: "⌛ | Uploading, please wait a moment baby... <😘",
+                        success: "Successfully Uploaded ✅\n\n🔗 𝐔𝐑𝐋: %1",
+                        error: "× API error: %1. Contact MahMUD for help."
+                },
+                vi: {
+                        noMedia: "🐤 | Cưng ơi, vui lòng phản hồi một tệp ảnh hoặc video! 🖼️",
+                        uploading: "⌛ | Đang tải lên, chờ chút nhé cưng... <😘",
+                        success: "Tải lên thành công ✅\n\n🔗 𝐔𝐑𝐋: %1",
+                        error: "× Lỗi: %1. Liên hệ MahMUD để hỗ trợ."
+                }
+        },
 
-    try {
-      if (!messageReply || !messageReply.attachments?.length) {
-        return api.sendMessage(
-          "❐ Reply to a photo/video/audio file.",
-          threadID,
-          messageID
-        );
-      }
+        onStart: async function ({ api, event, message, getLang }) {
+                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68);
+                if (this.config.author !== authorName) {
+                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
+                }
 
-      const links = [];
+                if (event.type !== "message_reply" || !event.messageReply.attachments.length) {
+                        return message.reply(getLang("noMedia"));
+                }
 
-      for (const att of messageReply.attachments) {
-        try {
-          // 🔍 Fix: ensure valid URL
-          const fileUrl = att.url || att.previewUrl;
-          if (!fileUrl) continue;
+                try {
+                        api.setMessageReaction("⌛", event.messageID, () => {}, true);
+                        const waitMsg = await message.reply(getLang("uploading"));
 
-          const ext =
-            att.type === "photo" ? "jpg" :
-            att.type === "video" ? "mp4" :
-            att.type === "audio" ? "mp3" :
-            att.type === "animated_image" ? "gif" : "dat";
+                        const attachmentUrl = encodeURIComponent(event.messageReply.attachments[0].url);
+                        const baseUrl = await getBase();
+                        const apiUrl = `${baseUrl.replace(/\/$/, "")}/api/catbox?url=${attachmentUrl}`;
 
-          const filePath = path.join(
-            __dirname,
-            `catbox_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
-          );
+                        const response = await axios.get(apiUrl, { timeout: 100000 });
 
-          // 📥 Download file
-          const res = await axios({
-            url: fileUrl,
-            method: "GET",
-            responseType: "stream"
-          });
+                        if (response.data.status && response.data.link) {
+                                if (waitMsg?.messageID) api.unsendMessage(waitMsg.messageID);
+                                
+                                return message.reply({
+                                        body: getLang("success", response.data.link)
+                                }, () => {
+                                        api.setMessageReaction("✅", event.messageID, () => {}, true);
+                                });
+                        } else {
+                                throw new Error("API response status is false.");
+                        }
 
-          const writer = fs.createWriteStream(filePath);
-          res.data.pipe(writer);
-
-          await new Promise((resolve, reject) => {
-            writer.on("finish", resolve);
-            writer.on("error", reject);
-          });
-
-          // 📤 Upload to Catbox
-          const form = new FormData();
-          form.append("reqtype", "fileupload");
-          form.append("fileToUpload", fs.createReadStream(filePath));
-
-          const upload = await axios.post(
-            "https://catbox.moe/user/api.php",
-            form,
-            { headers: form.getHeaders() }
-          );
-
-          if (upload.data && upload.data.startsWith("http")) {
-            links.push(upload.data.trim());
-          } else {
-            links.push("❌ Upload failed");
-          }
-
-          // 🗑 Delete temp file
-          fs.unlinkSync(filePath);
-
-        } catch (err) {
-          console.log("❌ Error:", err.message);
-          links.push("❌ Failed");
+                } catch (err) {
+                        console.error("Catbox Error:", err);
+                        api.setMessageReaction("❌", event.messageID, () => {}, true);
+                        return message.reply(getLang("error", err.message));
+                }
         }
-      }
-
-      if (!links.length) {
-        return api.sendMessage("❌ No files processed!", threadID, messageID);
-      }
-
-      return api.sendMessage(
-        "✅ Uploaded:\n\n" + links.join("\n"),
-        threadID,
-        messageID
-      );
-
-    } catch (err) {
-      console.error(err);
-      return api.sendMessage("❌ Something went wrong!", threadID);
-    }
-  }
 };
