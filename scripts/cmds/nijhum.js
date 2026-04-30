@@ -2,8 +2,8 @@ const axios = require("axios");
 
 const NIJHUM_API = "https://exxai.onrender.com";
 
-// ─── Typing Indicator ──────────────────────────────────────────────────────
-const typing = async (api, threadID, ms = 3000) => {
+// ─── Typing Indicator ─────────────────────────
+const typing = async (api, threadID, ms = 2000) => {
   try {
     if (typeof api.sendTypingIndicator === "function") {
       await api.sendTypingIndicator(threadID, true);
@@ -13,7 +13,7 @@ const typing = async (api, threadID, ms = 3000) => {
   } catch {}
 };
 
-// ─── Sender Name Helper ────────────────────────────────────────────────────
+// ─── Sender Name ─────────────────────────────
 const getSenderName = async (usersData, senderID) => {
   try {
     return (await usersData.getName(senderID)) || "User";
@@ -22,17 +22,18 @@ const getSenderName = async (usersData, senderID) => {
   }
 };
 
-// ─── Nijhum API Call ───────────────────────────────────────────────────────
+// ─── API CALL ───────────────────────────────
 const askNijhum = async (message, senderName, senderID) => {
   const res = await axios.get(`${NIJHUM_API}/api/chat`, {
     params: { message, uid: senderID, name: senderName },
-    timeout: 20000
+    timeout: 10000
   });
+
   if (res.data?.success && res.data?.reply) return res.data.reply;
-  throw new Error(res.data?.error || "Nijhum is busy right now 💔");
+  throw new Error(res.data?.error || "Nijhum busy 💔");
 };
 
-// ─── Send Reply (multiple parts support) ──────────────────────────────────
+// ─── SEND REPLY ─────────────────────────────
 const sendReply = async (message, replyText, senderID, senderName) => {
   const parts = replyText
     .split(/\n\n---\n\n|\n---\n/)
@@ -52,34 +53,26 @@ const sendReply = async (message, replyText, senderID, senderName) => {
         resolve();
       });
     });
-    if (parts.length > 1) await new Promise(r => setTimeout(r, 800));
+    if (parts.length > 1) await new Promise(r => setTimeout(r, 700));
   }
 };
 
-// ──────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────
 module.exports = {
   config: {
     name: "nijhum",
     aliases: ["nij", "ai", "n"],
-    version: "2.1",
-    author: "SIYAM",
+    version: "3.0",
+    author: "SIYAM FIXED",
     countDown: 0,
     role: 0,
-    shortDescription: "Nijhum AI — romantic & friendly chatbot",
-    longDescription:
-      "Nijhum — a romantic, friendly, and smart AI. Chat in Bangla, English or Banglish! Supports reply-chain, typing indicator, and multiple messages.",
-    category: "ai",
-    guide: {
-      en:
-        "{p}nijhum [message]  — Chat with Nijhum AI\n" +
-        "{p}nijhum            — Show help\n\n" +
-        "💡 Trigger (without prefix):\n" +
-        "  Start your message with 'nijhum <msg>' to get a reply\n\n" +
-        "🔗 Reply to Nijhum's message to continue the conversation!"
-    }
+    shortDescription: "Nijhum AI chatbot",
+    category: "ai"
   },
 
-  // ────────────────────────────────────────────────────────────────────────
+  onStart: async function () {},
+
+  // ─── PREFIX COMMAND ──────────────────────
   onStart: async function ({ api, event, args, message, usersData }) {
     const senderID = event.senderID;
     const threadID = event.threadID;
@@ -88,32 +81,20 @@ module.exports = {
 
     if (!query) {
       return message.reply(
-        "🌸 𝗡𝗶𝗷𝗵𝘂𝗺 𝗔𝗜\n" +
-        "━━━━━━━━━━━━━━━━\n" +
-        "💬 Usage: .nijhum <your message>\n" +
-        "📌 Example: .nijhum how are you today?\n" +
-        "━━━━━━━━━━━━━━━━\n" +
-        "🗣️ Trigger: Start with 'nijhum <msg>' to chat without prefix\n" +
-        "🔗 Reply to Nijhum's message to keep the conversation going\n" +
-        "━━━━━━━━━━━━━━━━\n" +
-        "🔧 Developer: SIYAM"
+        "🌸 𝗡𝗶𝗷𝗵𝘂𝗺 𝗔𝗜\n━━━━━━━━━━━━━━\n💬 .nijhum <message>\n🗣️ বা লিখো: নিঝুম <message>"
       );
     }
 
     try {
-      await typing(api, threadID, 2500);
+      await typing(api, threadID);
       const reply = await askNijhum(query, senderName, senderID);
       await sendReply(message, reply, senderID, senderName);
     } catch (err) {
-      console.error("[Nijhum onStart]", err.message);
-      if (err.code === "ECONNABORTED") {
-        return message.reply("⏳ Nijhum is taking too long (timeout). Please try again!");
-      }
-      return message.reply(`❌ ${err.message || "Cannot connect to Nijhum. Please check the server!"}`);
+      return message.reply("❌ Server busy, আবার চেষ্টা করো");
     }
   },
 
-  // ────────────────────────────────────────────────────────────────────────
+  // ─── REPLY CONTINUE ──────────────────────
   onReply: async function ({ api, event, message, usersData }) {
     const text = event.body?.trim();
     if (!text) return;
@@ -123,44 +104,49 @@ module.exports = {
     const senderName = await getSenderName(usersData, senderID);
 
     try {
-      await typing(api, threadID, 2500);
+      await typing(api, threadID);
       const reply = await askNijhum(text, senderName, senderID);
       await sendReply(message, reply, senderID, senderName);
-    } catch (err) {
-      console.error("[Nijhum onReply]", err.message);
-      if (err.code === "ECONNABORTED") {
-        message.reply("⏳ Nijhum is taking too long (timeout). Please try again!");
-      }
+    } catch {
+      message.reply("❌ আবার চেষ্টা করো");
     }
   },
 
-  // ────────────────────────────────────────────────────────────────────────
+  // ─── AUTO CHAT (বাংলা + ইংরেজি) ─────────
   onChat: async function ({ api, event, message, usersData }) {
-    const raw = event.body?.trim() || "";
-    if (!raw) return;
-
-    const lower = raw.toLowerCase();
-    const senderID = event.senderID;
-    const threadID = event.threadID;
-
-    const prefixes = ["nijhum ", "nij ", "n "];
-    const matchedPrefix = prefixes.find(p => lower.startsWith(p));
-    if (!matchedPrefix) return;
-
-    const q = raw.slice(matchedPrefix.length).trim();
-    if (!q) return;
-
-    const senderName = await getSenderName(usersData, senderID);
-
     try {
-      await typing(api, threadID, 2500);
-      const reply = await askNijhum(q, senderName, senderID);
-      await sendReply(message, reply, senderID, senderName);
-    } catch (err) {
-      console.error("[Nijhum onChat]", err.message);
-      if (err.code === "ECONNABORTED") {
-        message.reply("⏳ Nijhum is taking too long (timeout). Please try again!");
+      const raw = event.body?.trim();
+      if (!raw) return;
+
+      const lower = raw.toLowerCase();
+      const senderID = event.senderID;
+      const threadID = event.threadID;
+
+      // ✅ ALL TRIGGERS
+      const triggers = [
+        "nijhum", "nij", "n",
+        "নিঝুম", "নিজুম", "নিঝুম "
+      ];
+
+      const match = triggers.find(t => lower.startsWith(t));
+      if (!match) return;
+
+      const q = raw.slice(match.length).trim();
+
+      if (!q) {
+        return message.reply("🌸 নিঝুম আছি 💖 কিছু বলো...");
       }
+
+      const senderName = await getSenderName(usersData, senderID);
+
+      await typing(api, threadID);
+
+      const reply = await askNijhum(q, senderName, senderID);
+
+      await sendReply(message, reply, senderID, senderName);
+
+    } catch (err) {
+      console.error("CHAT ERROR:", err.message);
     }
   }
 };
